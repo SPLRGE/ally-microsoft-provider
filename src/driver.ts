@@ -1,20 +1,4 @@
-/*
-|--------------------------------------------------------------------------
-| Ally Oauth driver
-|--------------------------------------------------------------------------
-|
-| Make sure you through the code and comments properly and make necessary
-| changes as per the requirements of your implementation.
-|
-*/
-
-/**
-|--------------------------------------------------------------------------
- *  Search keyword "YourDriver" and replace it with a meaningful name
-|--------------------------------------------------------------------------
- */
-
-import { Oauth2Driver } from '@adonisjs/ally'
+import {Oauth2Driver, RedirectRequest} from '@adonisjs/ally'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { AllyDriverContract, AllyUserContract, ApiRequestContract } from '@adonisjs/ally/types'
 
@@ -24,7 +8,7 @@ import type { AllyDriverContract, AllyUserContract, ApiRequestContract } from '@
  * token must have "token" and "type" properties and you may
  * define additional properties (if needed)
  */
-export type YourDriverAccessToken = {
+export type MicrosoftAccessToken = {
   token: string
   type: 'bearer'
 }
@@ -32,27 +16,28 @@ export type YourDriverAccessToken = {
 /**
  * Scopes accepted by the driver implementation.
  */
-export type YourDriverScopes = string
+export type MicrosoftScopes = string
 
 /**
  * The configuration accepted by the driver implementation.
  */
-export type YourDriverConfig = {
+export type MicrosoftConfig = {
   clientId: string
   clientSecret: string
   callbackUrl: string
   authorizeUrl?: string
   accessTokenUrl?: string
-  userInfoUrl?: string
+  userInfoUrl?: string,
+  scopes?: MicrosoftScopes[],
 }
 
 /**
  * Driver implementation. It is mostly configuration driven except the API call
  * to get user info.
  */
-export class YourDriver
-  extends Oauth2Driver<YourDriverAccessToken, YourDriverScopes>
-  implements AllyDriverContract<YourDriverAccessToken, YourDriverScopes>
+export class Microsoft
+  extends Oauth2Driver<MicrosoftAccessToken, MicrosoftScopes>
+  implements AllyDriverContract<MicrosoftAccessToken, MicrosoftScopes>
 {
   /**
    * The URL for the redirect request. The user will be redirected on this page
@@ -60,21 +45,21 @@ export class YourDriver
    *
    * Do not define query strings in this URL.
    */
-  protected authorizeUrl = ''
+  protected authorizeUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 
   /**
    * The URL to hit to exchange the authorization code for the access token
    *
    * Do not define query strings in this URL.
    */
-  protected accessTokenUrl = ''
+  protected accessTokenUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 
   /**
    * The URL to hit to get the user details
    *
    * Do not define query strings in this URL.
    */
-  protected userInfoUrl = ''
+  protected userInfoUrl = 'https://graph.microsoft.com/v1.0/me'
 
   /**
    * The param name for the authorization code. Read the documentation of your oauth
@@ -88,14 +73,14 @@ export class YourDriver
    * the param name to match the query string field name in which the oauth provider sends
    * the error post redirect
    */
-  protected errorParamName = 'error'
+  protected errorParamName = 'error_description'
 
   /**
    * Cookie name for storing the CSRF token. Make sure it is always unique. So a better
    * approach is to prefix the oauth provider name to `oauth_state` value. For example:
    * For example: "facebook_oauth_state"
    */
-  protected stateCookieName = 'YourDriver_oauth_state'
+  protected stateCookieName = 'microsoft_oauth_state'
 
   /**
    * Parameter name to be used for sending and receiving the state from.
@@ -117,10 +102,9 @@ export class YourDriver
 
   constructor(
     ctx: HttpContext,
-    public config: YourDriverConfig
+    public config: MicrosoftConfig
   ) {
     super(ctx, config)
-
     /**
      * Extremely important to call the following method to clear the
      * state set by the redirect request.
@@ -135,7 +119,10 @@ export class YourDriver
    * is made by the base implementation of "Oauth2" driver and this is a
    * hook to pre-configure the request.
    */
-  // protected configureRedirectRequest(request: RedirectRequest<YourDriverScopes>) {}
+  protected configureRedirectRequest(request: RedirectRequest<MicrosoftScopes>) {
+    request.scopes(this.config.scopes || ['openid', 'email', 'profile'])
+    request.param('response_type', 'code')
+  }
 
   /**
    * Optionally configure the access token request. The actual request is made by
@@ -161,9 +148,11 @@ export class YourDriver
    */
   async user(
     callback?: (request: ApiRequestContract) => void
-  ): Promise<AllyUserContract<YourDriverAccessToken>> {
+  ): Promise<AllyUserContract<MicrosoftAccessToken>> {
     const accessToken = await this.accessToken()
     const request = this.httpClient(this.config.userInfoUrl || this.userInfoUrl)
+
+    request.header('Authorization', `Bearer ${accessToken.token}`)
 
     /**
      * Allow end user to configure the request. This should be called after your custom
@@ -173,9 +162,18 @@ export class YourDriver
       callback(request)
     }
 
-    /**
-     * Write your implementation details here
-     */
+    const body = await request.get()
+
+    return {
+      avatarUrl: null,
+      email: body.mail,
+      emailVerificationState: 'unsupported',
+      name: `${body.givenName} ${body.surname}`,
+      nickName: body.displayName,
+      original: body,
+      token: accessToken,
+      id: body.id
+    }
   }
 
   async userFromToken(
@@ -184,6 +182,8 @@ export class YourDriver
   ): Promise<AllyUserContract<{ token: string; type: 'bearer' }>> {
     const request = this.httpClient(this.config.userInfoUrl || this.userInfoUrl)
 
+    request.header('Authorization', `Bearer ${accessToken}`)
+
     /**
      * Allow end user to configure the request. This should be called after your custom
      * configuration, so that the user can override them (if needed)
@@ -192,9 +192,21 @@ export class YourDriver
       callback(request)
     }
 
-    /**
-     * Write your implementation details here
-     */
+    const body = await request.get()
+
+    return {
+      avatarUrl: null,
+      email: body.mail,
+      emailVerificationState: 'unsupported',
+      name: `${body.givenName} ${body.surname}`,
+      nickName: body.displayName,
+      original: body,
+      token: {
+        token: accessToken,
+        type: 'bearer'
+      },
+      id: body.id
+    }
   }
 }
 
@@ -202,6 +214,6 @@ export class YourDriver
  * The factory function to reference the driver implementation
  * inside the "config/ally.ts" file.
  */
-export function YourDriverService(config: YourDriverConfig): (ctx: HttpContext) => YourDriver {
-  return (ctx) => new YourDriver(ctx, config)
+export function MicrosoftService(config: MicrosoftConfig): (ctx: HttpContext) => Microsoft {
+  return (ctx) => new Microsoft(ctx, config)
 }
