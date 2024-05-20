@@ -14,12 +14,8 @@ jobs:
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org/
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
       - name: Publish to npm
         run: npm publish --access public
         env:
