@@ -163,16 +163,17 @@ export class Microsoft
     }
 
     const body = await request.get()
+    const serialized = JSON.parse(body)
 
     return {
       avatarUrl: null,
-      email: body.mail,
+      email: serialized.mail,
       emailVerificationState: 'unsupported',
-      name: `${body.givenName} ${body.surname}`,
-      nickName: body.displayName,
-      original: body,
+      name: `${serialized.givenName} ${serialized.surname}`,
+      nickName: serialized.displayName,
+      original: serialized,
       token: accessToken,
-      id: body.id
+      id: serialized.id
     }
   }
 
