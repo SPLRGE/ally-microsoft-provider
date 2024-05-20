@@ -1,6 +1,6 @@
 {
   "name": "@splrge/ally-microsoft-provider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ally provider for Microsoft",
   "main": "build/index.js",
   "type": "module",
