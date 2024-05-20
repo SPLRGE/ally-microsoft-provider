@@ -20,6 +20,8 @@ jobs:
           version: latest
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
       - name: Publish to npm
         run: npm publish --access public
         env:
